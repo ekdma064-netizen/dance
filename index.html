@@ -272,24 +272,181 @@
        ========================================================================== */
     const DANCE_MISSIONS = [
       {
+        id: "soyeon_quit",
+        artist: "소연",
+        name: "퇴사할게여 (발랄 힙 킥)",
+        hint: "두 손을 허리/앞쪽에 모으고 상체를 돌린 채 한쪽 다리를 뒤로 90도 이상 꺾어 올려주세요!",
+        duration: 9,
+        svgPath: `
+          <!-- Head -->
+          <circle cx="45" cy="22" r="7" fill="#F43F5E" />
+          <!-- Torso turned side -->
+          <line x1="45" y1="29" x2="45" y2="58" stroke="#F43F5E" stroke-width="5" />
+          <!-- Folded hands near waist -->
+          <path d="M 45 35 L 35 48 L 42 52" stroke="#38BDF8" stroke-width="5" fill="none" />
+          <path d="M 45 35 L 38 48 L 42 52" stroke="#38BDF8" stroke-width="5" fill="none" />
+          <!-- Standing Leg straight -->
+          <line x1="45" y1="58" x2="45" y2="92" stroke="#F43F5E" stroke-width="5" />
+          <!-- Bent Back Leg kick up -->
+          <path d="M 45 58 L 65 62 L 72 45" stroke="#38BDF8" stroke-width="6" fill="none" stroke-linecap="round" />
+        `,
+        evaluator: (angles, landmarks) => {
+          // Check if at least one knee is bent sharply backwards/upwards
+          const leftKneeBent = angles.leftKnee < 115;
+          const rightKneeBent = angles.rightKnee < 115;
+          // One ankle significantly higher than the standing ankle
+          const ankleDiff = Math.abs(landmarks[27].y - landmarks[28].y);
+          const oneFootLifted = ankleDiff > 0.12;
+          
+          // Hands gathered near pelvis/hip region
+          const handsAroundHips = (landmarks[15].y > landmarks[11].y) && (landmarks[16].y > landmarks[12].y);
+          const wristsClose = Math.hypot(landmarks[15].x - landmarks[16].x, landmarks[15].y - landmarks[16].y) < 0.20;
+
+          let score = 0;
+          if (leftKneeBent || rightKneeBent) score += 35;
+          if (oneFootLifted) score += 30;
+          if (handsAroundHips) score += 20;
+          if (wristsClose) score += 15;
+          return Math.min(100, score);
+        }
+      },
+      {
+        id: "sajaboys_sodapop",
+        artist: "사자보이즈",
+        name: "소다팝 (콜미 힙합 샤카)",
+        hint: "옆으로 서서 한 손은 귀/얼굴 옆에 전화기 모양으로 올리고, 다른 손은 힙하게 아래로 내려주세요!",
+        duration: 9,
+        svgPath: `
+          <!-- Cap and Head -->
+          <circle cx="50" cy="22" r="7" fill="#F43F5E" />
+          <path d="M 42 18 L 62 16" stroke="#FBBF24" stroke-width="4" stroke-linecap="round" />
+          <!-- Torso -->
+          <line x1="50" y1="29" x2="48" y2="60" stroke="#F43F5E" stroke-width="5" />
+          <!-- Hand to ear (calling/shaka) -->
+          <path d="M 50 35 L 63 32 L 60 20" stroke="#38BDF8" stroke-width="6" fill="none" stroke-linecap="round" />
+          <!-- Other hand hanging down near thigh -->
+          <line x1="48" y1="36" x2="43" y2="58" stroke="#38BDF8" stroke-width="5" />
+          <!-- Legs (slightly shifted side stance) -->
+          <line x1="48" y1="60" x2="46" y2="92" stroke="#F43F5E" stroke-width="5" />
+          <line x1="48" y1="60" x2="55" y2="92" stroke="#F43F5E" stroke-width="5" />
+        `,
+        evaluator: (angles, landmarks) => {
+          // One wrist up near head level (ear/chin)
+          const leftNearHead = Math.hypot(landmarks[15].x - landmarks[0].x, landmarks[15].y - landmarks[0].y) < 0.28;
+          const rightNearHead = Math.hypot(landmarks[16].x - landmarks[0].x, landmarks[16].y - landmarks[0].y) < 0.28;
+          
+          // The other wrist should be down near hip/waist
+          const leftDown = landmarks[15].y > landmarks[23].y - 0.1;
+          const rightDown = landmarks[16].y > landmarks[24].y - 0.1;
+
+          // Asymmetric arm pose check
+          const oneUpOneDown = (leftNearHead && rightDown) || (rightNearHead && leftDown);
+
+          let score = 0;
+          if (leftNearHead || rightNearHead) score += 40;
+          if (oneUpOneDown) score += 35;
+          if (angles.leftElbow < 120 || angles.rightElbow < 120) score += 25; // Arm bent to ear
+          return Math.min(100, score);
+        }
+      },
+      {
+        id: "hyoris_skibidi",
+        artist: "효리스",
+        name: "스키비디 (헤드 락 앤 와이드)",
+        hint: "양다리를 넓게 벌려 기마자세를 취하고, 한 손은 머리 위를 감싸듯 얹고 반대 손은 뒤로 뻗어주세요!",
+        duration: 9,
+        svgPath: `
+          <!-- Character Head -->
+          <circle cx="50" cy="22" r="8" fill="#FBBF24" />
+          <!-- Torso leaning into groove -->
+          <line x1="50" y1="30" x2="46" y2="58" stroke="#F43F5E" stroke-width="5" />
+          <!-- One hand curved touching head -->
+          <path d="M 50 35 L 68 28 L 52 14" stroke="#38BDF8" stroke-width="6" fill="none" stroke-linecap="round" />
+          <!-- Other hand pointing back/down -->
+          <line x1="48" y1="38" x2="28" y2="52" stroke="#38BDF8" stroke-width="6" stroke-linecap="round" />
+          <!-- Wide Stance Skibidi Legs -->
+          <path d="M 46 58 L 32 72 L 24 92" stroke="#F43F5E" stroke-width="6" fill="none" stroke-linejoin="round" />
+          <path d="M 46 58 L 62 72 L 72 92" stroke="#F43F5E" stroke-width="6" fill="none" stroke-linejoin="round" />
+        `,
+        evaluator: (angles, landmarks) => {
+          // One hand over/touching head
+          const headPoint = landmarks[0];
+          const leftOnHead = landmarks[15].y < headPoint.y + 0.05 && Math.abs(landmarks[15].x - headPoint.x) < 0.22;
+          const rightOnHead = landmarks[16].y < headPoint.y + 0.05 && Math.abs(landmarks[16].x - headPoint.x) < 0.22;
+          
+          // Wide knee stance
+          const feetDistance = Math.abs(landmarks[27].x - landmarks[28].x);
+          const isWideStance = feetDistance > 0.30;
+          
+          // Knee bend (groove)
+          const kneesBent = (angles.leftKnee < 165) && (angles.rightKnee < 165);
+
+          let score = 0;
+          if (leftOnHead || rightOnHead) score += 40;
+          if (isWideStance) score += 30;
+          if (kneesBent) score += 30;
+          return Math.min(100, score);
+        }
+      },
+      {
+        id: "illit_its_me",
+        artist: "아일릿",
+        name: "잇츠미 (수평 꺾기 & 하이킥)",
+        hint: "한 손은 머리 위에서 'ᄀ'자로 수평을 만들고, 한쪽 다리를 옆으로 힘차게 뻗어 킥을 날리세요!",
+        duration: 9,
+        svgPath: `
+          <!-- Head -->
+          <circle cx="50" cy="22" r="7" fill="#F43F5E" />
+          <!-- Torso -->
+          <line x1="50" y1="29" x2="50" y2="58" stroke="#F43F5E" stroke-width="5" />
+          <!-- Right Arm Horizontal Cap Angle (ㄱ shape over head) -->
+          <path d="M 47 34 L 38 22 L 52 16" stroke="#38BDF8" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+          <!-- Other Hand at Waist -->
+          <path d="M 53 34 L 62 44 L 54 48" stroke="#38BDF8" stroke-width="5" fill="none" />
+          <!-- Standing Leg -->
+          <line x1="50" y1="58" x2="52" y2="92" stroke="#F43F5E" stroke-width="5" />
+          <!-- Straight Side Kick Leg -->
+          <line x1="50" y1="58" x2="16" y2="70" stroke="#FBBF24" stroke-width="6" stroke-linecap="round" />
+        `,
+        evaluator: (angles, landmarks) => {
+          // 1. One wrist at head height bent inwards horizontally
+          const leftElbowBent = (angles.leftElbow < 115) && (landmarks[15].y < landmarks[11].y);
+          const rightElbowBent = (angles.rightElbow < 115) && (landmarks[16].y < landmarks[12].y);
+
+          // 2. Clear leg extension / side kick (one ankle high up and far out horizontally)
+          const ankleDiffY = Math.abs(landmarks[27].y - landmarks[28].y);
+          const legSeparationX = Math.abs(landmarks[27].x - landmarks[28].x);
+          const isHighSideKick = ankleDiffY > 0.15 || legSeparationX > 0.35;
+
+          // 3. Knee straightness on the kicked leg
+          const oneLegStraight = (angles.leftKnee > 145) || (angles.rightKnee > 145);
+
+          let score = 0;
+          if (leftElbowBent || rightElbowBent) score += 35;
+          if (isHighSideKick) score += 40;
+          if (oneLegStraight) score += 25;
+          return Math.min(100, score);
+        }
+      },
+      {
         id: "v_cheer",
-        name: "승리의 V 치어업",
-        hint: "양손을 번쩍 들어 V자 모양을 만들며 에너지를 뿜어내세요!",
+        artist: "FINAL",
+        name: "승리의 피날레 V",
+        hint: "모든 미션 통과! 양손을 하늘로 번쩍 뻗어 피날레 V자를 만들어주세요!",
         duration: 8,
         svgPath: `
           <!-- Head -->
           <circle cx="50" cy="22" r="8" fill="#F43F5E" />
           <!-- Torso -->
-          <line x1="50" y1="30" x2="50" y2="60" stroke="#F43F5E" />
+          <line x1="50" y1="30" x2="50" y2="60" stroke="#F43F5E" stroke-width="5" />
           <!-- Arms in V Shape -->
           <line x1="50" y1="35" x2="25" y2="15" stroke="#38BDF8" stroke-width="6" />
           <line x1="50" y1="35" x2="75" y2="15" stroke="#38BDF8" stroke-width="6" />
           <!-- Legs -->
-          <line x1="50" y1="60" x2="35" y2="90" stroke="#F43F5E" />
-          <line x1="50" y1="60" x2="65" y2="90" stroke="#F43F5E" />
+          <line x1="50" y1="60" x2="35" y2="90" stroke="#F43F5E" stroke-width="5" />
+          <line x1="50" y1="60" x2="65" y2="90" stroke="#F43F5E" stroke-width="5" />
         `,
         evaluator: (angles, landmarks) => {
-          // Both wrists higher than shoulders, elbow angle open
           const leftArmUp = landmarks[15].y < landmarks[11].y;
           const rightArmUp = landmarks[16].y < landmarks[12].y;
           const leftArmAngle = angles.leftElbow;
@@ -300,126 +457,6 @@
           if (rightArmUp) score += 35;
           if (leftArmAngle > 120) score += 15;
           if (rightArmAngle > 120) score += 15;
-          return Math.min(100, score);
-        }
-      },
-      {
-        id: "kpop_heart",
-        name: "시그니처 머리 위 하트",
-        hint: "양손을 머리 위로 모아 큰 사랑의 하트를 만들어보세요!",
-        duration: 8,
-        svgPath: `
-          <!-- Head -->
-          <circle cx="50" cy="30" r="8" fill="#F43F5E" />
-          <!-- Torso -->
-          <line x1="50" y1="38" x2="50" y2="65" stroke="#F43F5E" />
-          <!-- Arms Curved up over head -->
-          <path d="M 50 42 C 20 28, 30 10, 50 14" stroke="#F43F5E" stroke-width="6" fill="none" />
-          <path d="M 50 42 C 80 28, 70 10, 50 14" stroke="#F43F5E" stroke-width="6" fill="none" />
-          <!-- Legs -->
-          <line x1="50" y1="65" x2="40" y2="92" stroke="#F43F5E" />
-          <line x1="50" y1="65" x2="60" y2="92" stroke="#F43F5E" />
-        `,
-        evaluator: (angles, landmarks) => {
-          // Wrists close to each other and above head
-          const headY = landmarks[0].y;
-          const leftWristAbove = landmarks[15].y < headY;
-          const rightWristAbove = landmarks[16].y < headY;
-          // Distance between wrists
-          const dx = landmarks[15].x - landmarks[16].x;
-          const dy = landmarks[15].y - landmarks[16].y;
-          const wristDist = Math.sqrt(dx * dx + dy * dy);
-
-          let score = 0;
-          if (leftWristAbove) score += 30;
-          if (rightWristAbove) score += 30;
-          if (wristDist < 0.25) score += 30; // Hands close together
-          if (angles.leftElbow < 140 && angles.rightElbow < 140) score += 10;
-          return Math.min(100, score);
-        }
-      },
-      {
-        id: "disco_fever",
-        name: "디스코 포인트 (오른쪽 위!)",
-        hint: "오른손을 대각선 하늘 위로, 왼손은 허리춤에 걸쳐주세요!",
-        duration: 8,
-        svgPath: `
-          <circle cx="50" cy="25" r="8" fill="#F43F5E" />
-          <line x1="50" y1="33" x2="50" y2="62" stroke="#F43F5E" />
-          <!-- Right arm diagonal up -->
-          <line x1="50" y1="38" x2="85" y2="12" stroke="#38BDF8" stroke-width="6" />
-          <!-- Left arm bent to hip -->
-          <path d="M 50 38 L 30 45 L 42 58" stroke="#38BDF8" stroke-width="6" fill="none" />
-          <line x1="50" y1="62" x2="35" y2="90" stroke="#F43F5E" />
-          <line x1="50" y1="62" x2="65" y2="90" stroke="#F43F5E" />
-        `,
-        evaluator: (angles, landmarks) => {
-          // Note: In mirror camera, right arm is screen-left landmark 16 vs 15
-          const rightArmSky = landmarks[16].y < landmarks[12].y - 0.15;
-          const leftArmLow = landmarks[15].y > landmarks[11].y;
-          const rightStraight = angles.rightElbow > 120;
-          const leftBent = angles.leftElbow < 110;
-
-          let score = 0;
-          if (rightArmSky) score += 40;
-          if (leftArmLow) score += 20;
-          if (rightStraight) score += 20;
-          if (leftBent) score += 20;
-          return Math.min(100, score);
-        }
-      },
-      {
-        id: "t_pose_balance",
-        name: "파워 T-스탠스",
-        hint: "양팔을 수평으로 곧게 뻗어 어깨 높이로 평형을 유지하세요!",
-        duration: 8,
-        svgPath: `
-          <circle cx="50" cy="25" r="8" fill="#F43F5E" />
-          <line x1="50" y1="33" x2="50" y2="65" stroke="#F43F5E" />
-          <!-- Both Arms Horizontal -->
-          <line x1="15" y1="40" x2="85" y2="40" stroke="#38BDF8" stroke-width="6" />
-          <line x1="50" y1="65" x2="40" y2="92" stroke="#F43F5E" />
-          <line x1="50" y1="65" x2="60" y2="92" stroke="#F43F5E" />
-        `,
-        evaluator: (angles, landmarks) => {
-          // Wrists roughly level with shoulders
-          const leftLevel = Math.abs(landmarks[15].y - landmarks[11].y) < 0.14;
-          const rightLevel = Math.abs(landmarks[16].y - landmarks[12].y) < 0.14;
-          const leftStraight = angles.leftElbow > 130;
-          const rightStraight = angles.rightElbow > 130;
-
-          let score = 0;
-          if (leftLevel) score += 30;
-          if (rightLevel) score += 30;
-          if (leftStraight) score += 20;
-          if (rightStraight) score += 20;
-          return Math.min(100, score);
-        }
-      },
-      {
-        id: "hiphop_freeze",
-        name: "힙합 크로스 가드",
-        hint: "가슴 앞에서 양 팔을 교차(X자)하여 힙합 프리즈 자세를 취하세요!",
-        duration: 8,
-        svgPath: `
-          <circle cx="50" cy="25" r="8" fill="#F43F5E" />
-          <line x1="50" y1="33" x2="50" y2="65" stroke="#F43F5E" />
-          <!-- Arms crossed in chest -->
-          <line x1="30" y1="36" x2="70" y2="52" stroke="#38BDF8" stroke-width="6" />
-          <line x1="70" y1="36" x2="30" y2="52" stroke="#38BDF8" stroke-width="6" />
-          <line x1="50" y1="65" x2="35" y2="90" stroke="#F43F5E" />
-          <line x1="50" y1="65" x2="65" y2="90" stroke="#F43F5E" />
-        `,
-        evaluator: (angles, landmarks) => {
-          // Wrists positioned near opposite shoulder or middle chest
-          const leftWristCrossed = landmarks[15].x > landmarks[12].x - 0.1;
-          const rightWristCrossed = landmarks[16].x < landmarks[11].x + 0.1;
-          const wristsAroundChest = landmarks[15].y > landmarks[11].y && landmarks[15].y < landmarks[23].y;
-
-          let score = 0;
-          if (leftWristCrossed) score += 35;
-          if (rightWristCrossed) score += 35;
-          if (wristsAroundChest) score += 30;
           return Math.min(100, score);
         }
       }
@@ -667,7 +704,8 @@
       const mission = DANCE_MISSIONS[gameState.currentMissionIndex];
       if (!mission) return;
 
-      targetPoseName.innerText = mission.name;
+      const artistBadge = mission.artist ? `[${mission.artist}] ` : '';
+      targetPoseName.innerText = `${artistBadge}${mission.name}`;
       targetPoseHint.innerText = mission.hint;
       targetSilhouette.innerHTML = mission.svgPath;
       hudRound.innerText = `${gameState.currentMissionIndex + 1} / ${DANCE_MISSIONS.length}`;
