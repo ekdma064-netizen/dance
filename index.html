@@ -57,16 +57,16 @@ button{font-family:inherit;cursor:pointer;border:0}
 .hud .sp{flex:1}
 .hud button{background:var(--panel2);color:var(--ink);border-radius:999px;padding:7px 14px;font-weight:700;font-size:14px;white-space:nowrap}
 @media (max-width:560px){.hud{gap:6px;padding:8px}.hud .pill{padding:5px 9px;font-size:13px}.hud .pill b{font-size:15px}.hud button{padding:6px 9px;font-size:13px}}
-.stage{flex:1;display:grid;grid-template-columns:minmax(280px,36%) 1fr;gap:12px;padding:12px;min-height:0}
-@media (orientation:portrait){ .stage{grid-template-columns:1fr;grid-template-rows:minmax(0,42%) 1fr} }
-.mission{background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:14px;display:flex;flex-direction:column;min-height:0}
-@media (orientation:portrait){ .mission{display:grid;grid-template-columns:44% 1fr;grid-template-rows:auto auto 1fr;column-gap:12px}
+.stage{flex:1;display:grid;grid-template-columns:minmax(300px,46%) 1fr;gap:12px;padding:12px;min-height:0}
+@media (orientation:portrait){ .stage{grid-template-columns:1fr;grid-template-rows:minmax(0,56%) 1fr} }
+.mission{background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:10px 12px;display:flex;flex-direction:column;min-height:0}
+@media (orientation:portrait){ .mission{display:grid;grid-template-columns:58% 1fr;grid-template-rows:auto auto 1fr;column-gap:12px}
   .mission .fig{grid-column:1;grid-row:1/4} .mission .tag,.mission .song,.mission .info{grid-column:2} }
-.mission .song{text-align:center;margin-top:4px}
+.mission .song{text-align:center;margin-top:2px}
 @media (orientation:portrait){ .mission .song{text-align:left} }
 .mission .artist{font-size:14px;color:var(--muted);font-weight:700;margin-top:2px}
 .mission .tag{font-size:13px;color:var(--muted);font-weight:700}
-.mission h2{font-family:"Jua";font-size:clamp(26px,3.4vw,38px);color:var(--accent);line-height:1.15}
+.mission h2{font-family:"Jua";font-size:clamp(22px,2.8vw,32px);color:var(--accent);line-height:1.15}
 .mission .fig{flex:1;min-height:0;position:relative}
 .mission .fig canvas,.mission .fig img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
 .mission .fig img{display:none;border-radius:16px}
@@ -74,11 +74,11 @@ button{font-family:inherit;cursor:pointer;border:0}
 .mission .fig.has-img canvas{display:none}
 .mission .desc{display:none} /* 동작 설명 문구 숨김 */
 .mission .mir{font-size:12px;color:var(--teal);font-weight:700}
-.pass{display:block;width:100%;margin-top:12px;padding:12px;border-radius:14px;font-family:"Jua";font-size:22px;background:var(--panel2);color:var(--ink);border:2px solid var(--line)}
+.pass{display:block;width:100%;margin-top:8px;padding:9px;border-radius:14px;font-family:"Jua";font-size:22px;background:var(--panel2);color:var(--ink);border:2px solid var(--line)}
 .pass:active{transform:translateY(2px)}
 .pass:disabled{opacity:.35}
-.bars{margin-top:8px;display:flex;flex-direction:column;gap:8px}
-.bar{height:16px;background:var(--panel2);border-radius:999px;overflow:hidden;position:relative}
+.bars{margin-top:4px;display:flex;flex-direction:column;gap:5px}
+.bar{height:12px;background:var(--panel2);border-radius:999px;overflow:hidden;position:relative}
 .bar i{position:absolute;left:0;top:0;bottom:0;border-radius:999px;transition:width .08s linear}
 .bar .thr{position:absolute;top:-3px;bottom:-3px;width:3px;background:#fff;border-radius:2px;opacity:.85}
 .blabel{display:flex;justify-content:space-between;font-size:13px;color:var(--muted);font-weight:700;margin-bottom:3px}
