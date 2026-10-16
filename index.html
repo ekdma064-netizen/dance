@@ -113,8 +113,8 @@
 
     <!-- Active Camera & Pose Canvas Area -->
     <div class="w-full max-w-4xl relative aspect-video bg-slate-900 rounded-3xl overflow-hidden shadow-2xl border-2 border-slate-800 neon-border flex items-center justify-center group">
-      <!-- Hidden WebCam Video Source -->
-      <video id="webcam" class="hidden" playsinline></video>
+      <!-- Hidden WebCam Video Source (Added playsinline, autoplay, muted for iOS/Android mobile compatibility) -->
+      <video id="webcam" class="hidden" autoplay playsinline muted></video>
 
       <!-- Canvas for Rendering Mirrored Camera Feed & Skeletal Overlays -->
       <canvas id="outputCanvas" class="w-full h-full object-cover mirror-mode"></canvas>
@@ -173,12 +173,12 @@
               class="w-full bg-slate-900 border border-slate-700 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white focus:outline-none focus:border-pink-500 transition-colors" />
           </div>
         </div>
-
-        <button id="btnStartGame" class="px-8 py-3.5 rounded-2xl bg-gradient-to-r from-pink-600 via-purple-600 to-indigo-600 hover:from-pink-500 hover:to-indigo-500 text-white font-extrabold text-base sm:text-lg shadow-xl shadow-pink-600/40 flex items-center gap-2 transform active:scale-95 transition-all">
-          <i class="ph ph-play-fill text-xl"></i>
-          <span>카메라 켜고 게임 시작</span>
+        <button id="btnStartGame" type="button" class="w-full sm:w-auto px-8 py-4 rounded-2xl bg-gradient-to-r from-pink-600 via-purple-600 to-indigo-600 hover:from-pink-500 hover:to-indigo-500 text-white font-extrabold text-base sm:text-lg shadow-xl shadow-pink-600/40 flex items-center justify-center gap-2 transform active:scale-95 transition-all cursor-pointer z-50">
+          <i class="ph ph-play-fill text-2xl"></i>
+          <span id="btnStartText">카메라 켜고 게임 시작</span>
         </button>
         <span class="text-xs text-slate-500 mt-3">카메라 영상은 개인 기기 브라우저에서만 실시간 처리되며 서버로 전송되지 않습니다.</span>
+        <div id="cameraStatusMsg" class="mt-2 text-xs font-semibold text-rose-400 hidden"></div>
       </div>
 
       <!-- Game Result Modal (Hidden by Default) -->
@@ -714,12 +714,15 @@
     }
 
     /* ==========================================================================
-       7. MEDIAPIPE POSE TRACKER PIPELINE
+       7. MEDIAPIPE POSE TRACKER PIPELINE & MOBILE-SAFE WEBCAM
        ========================================================================== */
     let poseTracker = null;
-    let cameraInstance = null;
+    let isCameraRunning = false;
+    let animationFrameId = null;
 
     function initMediaPipe() {
+      if (poseTracker) return poseTracker;
+
       poseTracker = new Pose({
         locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
       });
@@ -729,11 +732,55 @@
         smoothLandmarks: true,
         enableSegmentation: false,
         smoothSegmentation: false,
-        minDetectionConfidence: 0.55,
-        minTrackingConfidence: 0.55
+        minDetectionConfidence: 0.5,
+        minTrackingConfidence: 0.5
       });
 
       poseTracker.onResults(onPoseResults);
+      return poseTracker;
+    }
+
+    // Direct Native getUserMedia for 100% Mobile Safari / Chrome compatibility
+    async function setupMobileWebcam() {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error("브라우저가 카메라 접근(WebRTC)을 지원하지 않습니다. HTTPS 주소(https://)로 접속했는지 확인해주세요.");
+      }
+
+      // Constraints optimized for front-facing mobile / tablet camera
+      const constraints = {
+        audio: false,
+        video: {
+          facingMode: "user",
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        }
+      };
+
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      videoElement.srcObject = stream;
+
+      return new Promise((resolve) => {
+        videoElement.onloadedmetadata = () => {
+          videoElement.play().then(() => {
+            resolve(videoElement);
+          }).catch(err => {
+            console.warn("Autoplay promise rejected, waiting touch event:", err);
+            resolve(videoElement);
+          });
+        };
+      });
+    }
+
+    async function streamVideoLoop() {
+      if (!isCameraRunning) return;
+      if (videoElement.readyState >= 2 && poseTracker) {
+        try {
+          await poseTracker.send({ image: videoElement });
+        } catch (err) {
+          // Ignore occasional dropped frames on slow mobile devices
+        }
+      }
+      animationFrameId = requestAnimationFrame(streamVideoLoop);
     }
 
     // Draw skeletal bones on canvas
@@ -999,27 +1046,55 @@
     /* ==========================================================================
        10. EVENT HANDLERS & INITIALIZATION
        ========================================================================== */
-    document.getElementById("btnStartGame").addEventListener("click", async () => {
+    const btnStartGame = document.getElementById("btnStartGame");
+    const btnStartText = document.getElementById("btnStartText");
+    const cameraStatusMsg = document.getElementById("cameraStatusMsg");
+
+    async function handleStartButtonClick(e) {
+      if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+
+      btnStartGame.disabled = true;
+      btnStartText.innerText = "카메라 연결 중...";
+      cameraStatusMsg.classList.add("hidden");
+
       try {
-        await sound.init();
+        // 1. Audio context init on direct user interaction
+        try {
+          await sound.init();
+        } catch (audioErr) {
+          console.warn("Audio init deferred:", audioErr);
+        }
+
+        // 2. Initialize MediaPipe
         initMediaPipe();
 
-        // Initialize WebCam through MediaPipe Camera utility
-        cameraInstance = new Camera(videoElement, {
-          onFrame: async () => {
-            await poseTracker.send({ image: videoElement });
-          },
-          width: 1280,
-          height: 720
-        });
+        // 3. Connect WebCam with mobile front-facing fallbacks
+        await setupMobileWebcam();
 
-        await cameraInstance.start();
-        showToast("카메라가 활성화되었습니다!");
+        // 4. Start detection loop
+        isCameraRunning = true;
+        streamVideoLoop();
+
+        showToast("카메라가 성공적으로 연결되었습니다!");
         startGame();
       } catch (err) {
         console.error("Camera access failed:", err);
-        showToast("카메라 권한을 허용해주세요!");
+        btnStartGame.disabled = false;
+        btnStartText.innerText = "다시 시도하기";
+        cameraStatusMsg.innerText = `카메라 연결 실패: ${err.message || "카메라 권한을 확인해주세요."}`;
+        cameraStatusMsg.classList.remove("hidden");
+        showToast("카메라 권한을 허용했는지 확인해주세요!");
       }
+    }
+
+    // Both click and touchstart binding to prevent mobile click delay or dismissal
+    btnStartGame.addEventListener("click", handleStartButtonClick);
+    btnStartGame.addEventListener("touchend", (e) => {
+      // Prevent synthetic double click trigger
+      handleStartButtonClick(e);
     });
 
     document.getElementById("btnRestartGame").addEventListener("click", () => {
