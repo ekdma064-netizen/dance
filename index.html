@@ -1,0 +1,1032 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>K-DANCE AI 챌린지 (Motion Challenge)</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts & Phosphor Icons -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@300;500;700;900&family=Black+Han+Sans&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+  <!-- Tone.js for dynamic game sound synthesis -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+  <!-- MediaPipe Pose and Camera Utils -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+
+  <style>
+    body {
+      font-family: 'Pretendard', sans-serif;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: manipulation;
+    }
+    .font-display {
+      font-family: 'Black Han Sans', sans-serif;
+    }
+    .neon-text-pink {
+      text-shadow: 0 0 10px rgba(244, 63, 94, 0.7), 0 0 20px rgba(244, 63, 94, 0.4);
+    }
+    .neon-text-cyan {
+      text-shadow: 0 0 10px rgba(6, 182, 212, 0.7), 0 0 20px rgba(6, 182, 212, 0.4);
+    }
+    .neon-border {
+      box-shadow: 0 0 15px rgba(236, 72, 153, 0.5), inset 0 0 15px rgba(236, 72, 153, 0.2);
+    }
+    @keyframes pulse-ring {
+      0% { transform: scale(0.95); opacity: 0.8; }
+      50% { transform: scale(1.05); opacity: 1; }
+      100% { transform: scale(0.95); opacity: 0.8; }
+    }
+    .animate-pulse-ring {
+      animation: pulse-ring 2s infinite ease-in-out;
+    }
+    /* Mirror webcam for natural tablet experience */
+    .mirror-mode {
+      transform: scaleX(-1);
+    }
+    /* Hide scrollbar */
+    ::-webkit-scrollbar {
+      display: none;
+    }
+  </style>
+</head>
+
+<body class="bg-slate-950 text-white min-h-screen flex flex-col items-center justify-between overflow-x-hidden selection:bg-pink-500 selection:text-white">
+  <header class="w-full bg-slate-900/80 backdrop-blur-md border-b border-pink-500/30 px-4 py-3 flex items-center justify-between z-30 sticky top-0 shadow-lg">
+    <div class="flex items-center space-x-3">
+      <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-pink-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-pink-500/30">
+        <i class="ph ph-sparkle text-2xl text-white"></i>
+      </div>
+      <div>
+        <h1 class="font-display text-xl tracking-wider bg-gradient-to-r from-pink-400 via-purple-300 to-cyan-400 bg-clip-text text-transparent">
+          K-DANCE AI 챌린지
+        </h1>
+        <p class="text-[10px] text-slate-400 font-medium">동작 인식 실시간 댄스 배틀</p>
+      </div>
+    </div>
+
+    <!-- User Status & Sound Controls -->
+    <div class="flex items-center space-x-3">
+      <div class="hidden sm:flex items-center space-x-2 bg-slate-800/80 rounded-full px-3 py-1 border border-slate-700">
+        <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+        <span id="playerBadge" class="text-xs font-semibold text-slate-200">플레이어 1</span>
+      </div>
+      <button id="btnToggleAudio" class="w-9 h-9 rounded-full bg-slate-800 border border-slate-700 hover:border-pink-500 flex items-center justify-center transition-all text-slate-300 hover:text-white">
+        <i id="audioIcon" class="ph ph-speaker-high text-lg"></i>
+      </button>
+      <button id="btnLeaderboardModal" class="px-3 py-1.5 rounded-full bg-pink-600 hover:bg-pink-500 font-bold text-xs flex items-center space-x-1.5 shadow-md shadow-pink-600/30 transition-all">
+        <i class="ph ph-trophy text-sm"></i>
+        <span>랭킹</span>
+      </button>
+    </div>
+  </header>
+
+  <main class="w-full max-w-6xl flex-1 flex flex-col p-2 sm:p-4 gap-4 items-center justify-center relative">
+    
+    <!-- Top HUD: Stage Info, Combo, Score -->
+    <div class="w-full grid grid-cols-3 gap-2 sm:gap-4 max-w-4xl px-2 z-10">
+      <!-- Mission Progress -->
+      <div class="bg-slate-900/70 border border-slate-800 backdrop-blur rounded-2xl p-2.5 sm:p-3 flex flex-col items-center justify-center shadow-md">
+        <span class="text-[11px] text-slate-400 font-bold uppercase tracking-wider">미션 라운드</span>
+        <span id="hudRound" class="text-lg sm:text-2xl font-black text-cyan-400 font-display">1 / 5</span>
+      </div>
+      <!-- Accuracy Gauge & Combo -->
+      <div class="bg-slate-900/70 border border-slate-800 backdrop-blur rounded-2xl p-2.5 sm:p-3 flex flex-col items-center justify-center shadow-md relative overflow-hidden">
+        <span class="text-[11px] text-slate-400 font-bold uppercase tracking-wider">동작 일치율</span>
+        <div class="flex items-baseline space-x-1">
+          <span id="hudAccuracy" class="text-xl sm:text-3xl font-black text-pink-400 font-display">0%</span>
+        </div>
+        <div id="comboBadge" class="absolute bottom-1 right-2 text-[10px] font-bold text-amber-400 hidden animate-bounce">
+          🔥 COMBO <span id="hudCombo">0</span>
+        </div>
+      </div>
+      <!-- Total Score -->
+      <div class="bg-slate-900/70 border border-slate-800 backdrop-blur rounded-2xl p-2.5 sm:p-3 flex flex-col items-center justify-center shadow-md">
+        <span class="text-[11px] text-slate-400 font-bold uppercase tracking-wider">획득 점수</span>
+        <span id="hudScore" class="text-xl sm:text-3xl font-black text-amber-300 font-display">0</span>
+      </div>
+    </div>
+
+    <!-- Active Camera & Pose Canvas Area -->
+    <div class="w-full max-w-4xl relative aspect-video bg-slate-900 rounded-3xl overflow-hidden shadow-2xl border-2 border-slate-800 neon-border flex items-center justify-center group">
+      <!-- Hidden WebCam Video Source -->
+      <video id="webcam" class="hidden" playsinline></video>
+
+      <!-- Canvas for Rendering Mirrored Camera Feed & Skeletal Overlays -->
+      <canvas id="outputCanvas" class="w-full h-full object-cover mirror-mode"></canvas>
+
+      <!-- Pose Guide Graphic Overlay (Right Top Corner Box) -->
+      <div id="targetPoseCard" class="absolute top-3 left-3 sm:top-5 sm:left-5 z-20 bg-slate-900/85 backdrop-blur-md border border-pink-500/50 rounded-2xl p-3 sm:p-4 max-w-[200px] sm:max-w-[240px] shadow-2xl transition-all duration-300">
+        <div class="flex items-center justify-between pb-1.5 border-b border-slate-700 mb-2">
+          <span class="text-[11px] font-black uppercase text-pink-400 tracking-wider flex items-center gap-1">
+            <i class="ph ph-target"></i> 타겟 포즈
+          </span>
+          <span id="timeRemaining" class="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-pink-500/20 text-pink-300">07s</span>
+        </div>
+        <div class="w-full aspect-square bg-slate-950/80 rounded-xl flex items-center justify-center overflow-hidden border border-slate-800 relative mb-2">
+          <svg id="targetSilhouette" class="w-4/5 h-4/5 text-pink-400 transition-all duration-500" viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+            <!-- Dynamic Silhouette Injected via JS -->
+          </svg>
+          <div id="matchPill" class="absolute bottom-2 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-slate-800/90 text-slate-300 transition-all">
+            대기 중
+          </div>
+        </div>
+        <h3 id="targetPoseName" class="font-bold text-sm sm:text-base text-white truncate">포즈 준비</h3>
+        <p id="targetPoseHint" class="text-[11px] text-slate-300 line-clamp-2 mt-0.5 leading-tight">카메라 앞에서 전신 또는 상체가 보이도록 서주세요.</p>
+      </div>
+
+      <!-- Real-time Score Hit Splash Text -->
+      <div id="splashEffect" class="absolute inset-0 pointer-events-none flex items-center justify-center z-30 transition-opacity opacity-0 scale-75 transform">
+        <span id="splashText" class="font-display text-5xl sm:text-7xl font-extrabold tracking-widest text-pink-400 neon-text-pink">
+          PERFECT!
+        </span>
+      </div>
+
+      <!-- Real-time Accuracy Progress Bar at bottom of screen -->
+      <div class="absolute bottom-0 left-0 right-0 h-3 bg-slate-950/60 z-20">
+        <div id="accuracyProgressBar" class="h-full bg-gradient-to-r from-cyan-400 via-pink-500 to-amber-400 w-0 transition-all duration-150"></div>
+      </div>
+
+      <!-- Pre-Game / Start Overlay -->
+      <div id="startOverlay" class="absolute inset-0 z-40 bg-slate-950/90 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center">
+        <div class="w-20 h-20 rounded-3xl bg-gradient-to-tr from-pink-500 to-indigo-600 flex items-center justify-center mb-4 shadow-xl shadow-pink-500/30 animate-pulse-ring">
+          <i class="ph ph-video-camera text-4xl text-white"></i>
+        </div>
+        <h2 class="font-display text-3xl sm:text-4xl text-white tracking-wide mb-2">
+          태블릿 카메라 준비 완료!
+        </h2>
+        <p class="text-sm sm:text-base text-slate-300 max-w-md mb-6 leading-relaxed">
+          화면에 제시되는 댄스 미션 포즈를 카메라를 보고 똑같이 취해주세요.
+          정확히 일치할수록 높은 점수와 콤보가 지급됩니다!
+        </p>
+
+        <!-- Player Name Input for Leaderboard -->
+        <div class="w-full max-w-xs mb-5">
+          <label class="block text-left text-xs font-semibold text-slate-400 mb-1.5">도전자 닉네임 입력</label>
+          <div class="relative">
+            <i class="ph ph-user absolute left-3.5 top-3 text-slate-400 text-lg"></i>
+            <input type="text" id="inputPlayerName" maxlength="10" value="댄싱머신" 
+              class="w-full bg-slate-900 border border-slate-700 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white focus:outline-none focus:border-pink-500 transition-colors" />
+          </div>
+        </div>
+
+        <button id="btnStartGame" class="px-8 py-3.5 rounded-2xl bg-gradient-to-r from-pink-600 via-purple-600 to-indigo-600 hover:from-pink-500 hover:to-indigo-500 text-white font-extrabold text-base sm:text-lg shadow-xl shadow-pink-600/40 flex items-center gap-2 transform active:scale-95 transition-all">
+          <i class="ph ph-play-fill text-xl"></i>
+          <span>카메라 켜고 게임 시작</span>
+        </button>
+        <span class="text-xs text-slate-500 mt-3">카메라 영상은 개인 기기 브라우저에서만 실시간 처리되며 서버로 전송되지 않습니다.</span>
+      </div>
+
+      <!-- Game Result Modal (Hidden by Default) -->
+      <div id="resultModal" class="absolute inset-0 z-40 bg-slate-950/95 backdrop-blur-xl hidden flex flex-col items-center justify-center p-6 text-center">
+        <div class="w-16 h-16 rounded-2xl bg-amber-500/20 border border-amber-500 flex items-center justify-center mb-3">
+          <i class="ph ph-crown text-3xl text-amber-400"></i>
+        </div>
+        <h2 class="font-display text-3xl text-white mb-1">CHALLENGE COMPLETE!</h2>
+        <p class="text-xs text-slate-400 mb-5">오늘의 댄스 미션 수행 결과</p>
+
+        <div class="bg-slate-900/80 border border-slate-800 rounded-2xl p-5 w-full max-w-sm mb-6 space-y-3">
+          <div class="flex justify-between items-center text-sm">
+            <span class="text-slate-400 font-medium">최종 점수</span>
+            <span id="resultFinalScore" class="font-black text-2xl text-amber-300 font-display">0</span>
+          </div>
+          <div class="flex justify-between items-center text-sm">
+            <span class="text-slate-400 font-medium">최대 콤보</span>
+            <span id="resultMaxCombo" class="font-bold text-pink-400 text-lg">0 Hits</span>
+          </div>
+          <div class="flex justify-between items-center text-sm">
+            <span class="text-slate-400 font-medium">평균 정확도</span>
+            <span id="resultAvgAccuracy" class="font-bold text-cyan-400 text-lg">0%</span>
+          </div>
+          <div class="flex justify-between items-center text-sm">
+            <span class="text-slate-400 font-medium">댄서 등급</span>
+            <span id="resultRankGrade" class="px-3 py-0.5 rounded-lg font-black text-base bg-pink-500/20 text-pink-400">S RANK</span>
+          </div>
+        </div>
+
+        <div class="flex gap-3">
+          <button id="btnRestartGame" class="px-6 py-2.5 rounded-xl bg-pink-600 hover:bg-pink-500 font-bold text-sm flex items-center gap-2 shadow-lg shadow-pink-600/30">
+            <i class="ph ph-arrow-clockwise text-base"></i> 다시 도전하기
+          </button>
+          <button id="btnShareLeaderboard" class="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 font-bold text-sm flex items-center gap-2">
+            <i class="ph ph-trophy text-base text-amber-400"></i> 랭킹 등록
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Instructions / Mission Track Timeline -->
+    <div class="w-full max-w-4xl bg-slate-900/60 border border-slate-800 rounded-2xl p-3 sm:p-4 flex flex-col md:flex-row items-center justify-between gap-3">
+      <div class="flex items-center space-x-3 text-xs text-slate-300">
+        <div class="w-7 h-7 rounded-lg bg-pink-500/20 text-pink-400 flex items-center justify-center font-bold">TIP</div>
+        <span>태블릿을 세워두고 1.5m~2m 떨어져서 화면 속 포즈 가이드와 팔/몸통 각도를 맞춰주세요!</span>
+      </div>
+      <!-- Pose Mission Dots indicator -->
+      <div id="missionIndicatorList" class="flex items-center gap-2">
+        <!-- Rendered dynamically -->
+      </div>
+    </div>
+  </main>
+
+  <!-- Leaderboard Modal Dialog -->
+  <div id="leaderboardModal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md p-6 relative shadow-2xl">
+      <button id="btnCloseLeaderboard" class="absolute top-4 right-4 w-8 h-8 rounded-full bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center">
+        <i class="ph ph-x text-lg"></i>
+      </button>
+
+      <div class="flex items-center gap-3 mb-5">
+        <div class="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center text-xl font-bold">
+          <i class="ph ph-trophy"></i>
+        </div>
+        <div>
+          <h3 class="font-display text-xl text-white">실시간 댄스 명예의 전당</h3>
+          <p class="text-xs text-slate-400">전 세계 참가자들과 경쟁해보세요</p>
+        </div>
+      </div>
+
+      <div id="leaderboardList" class="space-y-2.5 max-h-72 overflow-y-auto pr-1">
+        <!-- Dynamic Leaderboard Items -->
+      </div>
+
+      <div class="mt-5 pt-4 border-t border-slate-800 flex justify-between items-center">
+        <button id="btnResetLocalScores" class="text-xs text-slate-500 hover:text-slate-400 underline">내 점수 초기화</button>
+        <button id="btnCloseLeaderboardBottom" class="px-5 py-2 rounded-xl bg-pink-600 hover:bg-pink-500 text-xs font-bold">닫기</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- In-Game Toast Message Element -->
+  <div id="toastMessage" class="fixed bottom-6 z-50 bg-slate-800/90 border border-pink-500/50 backdrop-blur text-white text-xs px-4 py-2.5 rounded-full shadow-lg transform translate-y-20 opacity-0 transition-all duration-300 pointer-events-none flex items-center gap-2">
+    <i class="ph ph-info text-pink-400"></i>
+    <span id="toastText">알림 내용</span>
+  </div>
+
+  <script>
+    /* ==========================================================================
+       1. POSE DATASETS & DANCE CHOREOGRAPHY MISSIONS
+       ========================================================================== */
+    const DANCE_MISSIONS = [
+      {
+        id: "v_cheer",
+        name: "승리의 V 치어업",
+        hint: "양손을 번쩍 들어 V자 모양을 만들며 에너지를 뿜어내세요!",
+        duration: 8,
+        svgPath: `
+          <!-- Head -->
+          <circle cx="50" cy="22" r="8" fill="#F43F5E" />
+          <!-- Torso -->
+          <line x1="50" y1="30" x2="50" y2="60" stroke="#F43F5E" />
+          <!-- Arms in V Shape -->
+          <line x1="50" y1="35" x2="25" y2="15" stroke="#38BDF8" stroke-width="6" />
+          <line x1="50" y1="35" x2="75" y2="15" stroke="#38BDF8" stroke-width="6" />
+          <!-- Legs -->
+          <line x1="50" y1="60" x2="35" y2="90" stroke="#F43F5E" />
+          <line x1="50" y1="60" x2="65" y2="90" stroke="#F43F5E" />
+        `,
+        evaluator: (angles, landmarks) => {
+          // Both wrists higher than shoulders, elbow angle open
+          const leftArmUp = landmarks[15].y < landmarks[11].y;
+          const rightArmUp = landmarks[16].y < landmarks[12].y;
+          const leftArmAngle = angles.leftElbow;
+          const rightArmAngle = angles.rightElbow;
+          
+          let score = 0;
+          if (leftArmUp) score += 35;
+          if (rightArmUp) score += 35;
+          if (leftArmAngle > 120) score += 15;
+          if (rightArmAngle > 120) score += 15;
+          return Math.min(100, score);
+        }
+      },
+      {
+        id: "kpop_heart",
+        name: "시그니처 머리 위 하트",
+        hint: "양손을 머리 위로 모아 큰 사랑의 하트를 만들어보세요!",
+        duration: 8,
+        svgPath: `
+          <!-- Head -->
+          <circle cx="50" cy="30" r="8" fill="#F43F5E" />
+          <!-- Torso -->
+          <line x1="50" y1="38" x2="50" y2="65" stroke="#F43F5E" />
+          <!-- Arms Curved up over head -->
+          <path d="M 50 42 C 20 28, 30 10, 50 14" stroke="#F43F5E" stroke-width="6" fill="none" />
+          <path d="M 50 42 C 80 28, 70 10, 50 14" stroke="#F43F5E" stroke-width="6" fill="none" />
+          <!-- Legs -->
+          <line x1="50" y1="65" x2="40" y2="92" stroke="#F43F5E" />
+          <line x1="50" y1="65" x2="60" y2="92" stroke="#F43F5E" />
+        `,
+        evaluator: (angles, landmarks) => {
+          // Wrists close to each other and above head
+          const headY = landmarks[0].y;
+          const leftWristAbove = landmarks[15].y < headY;
+          const rightWristAbove = landmarks[16].y < headY;
+          // Distance between wrists
+          const dx = landmarks[15].x - landmarks[16].x;
+          const dy = landmarks[15].y - landmarks[16].y;
+          const wristDist = Math.sqrt(dx * dx + dy * dy);
+
+          let score = 0;
+          if (leftWristAbove) score += 30;
+          if (rightWristAbove) score += 30;
+          if (wristDist < 0.25) score += 30; // Hands close together
+          if (angles.leftElbow < 140 && angles.rightElbow < 140) score += 10;
+          return Math.min(100, score);
+        }
+      },
+      {
+        id: "disco_fever",
+        name: "디스코 포인트 (오른쪽 위!)",
+        hint: "오른손을 대각선 하늘 위로, 왼손은 허리춤에 걸쳐주세요!",
+        duration: 8,
+        svgPath: `
+          <circle cx="50" cy="25" r="8" fill="#F43F5E" />
+          <line x1="50" y1="33" x2="50" y2="62" stroke="#F43F5E" />
+          <!-- Right arm diagonal up -->
+          <line x1="50" y1="38" x2="85" y2="12" stroke="#38BDF8" stroke-width="6" />
+          <!-- Left arm bent to hip -->
+          <path d="M 50 38 L 30 45 L 42 58" stroke="#38BDF8" stroke-width="6" fill="none" />
+          <line x1="50" y1="62" x2="35" y2="90" stroke="#F43F5E" />
+          <line x1="50" y1="62" x2="65" y2="90" stroke="#F43F5E" />
+        `,
+        evaluator: (angles, landmarks) => {
+          // Note: In mirror camera, right arm is screen-left landmark 16 vs 15
+          const rightArmSky = landmarks[16].y < landmarks[12].y - 0.15;
+          const leftArmLow = landmarks[15].y > landmarks[11].y;
+          const rightStraight = angles.rightElbow > 120;
+          const leftBent = angles.leftElbow < 110;
+
+          let score = 0;
+          if (rightArmSky) score += 40;
+          if (leftArmLow) score += 20;
+          if (rightStraight) score += 20;
+          if (leftBent) score += 20;
+          return Math.min(100, score);
+        }
+      },
+      {
+        id: "t_pose_balance",
+        name: "파워 T-스탠스",
+        hint: "양팔을 수평으로 곧게 뻗어 어깨 높이로 평형을 유지하세요!",
+        duration: 8,
+        svgPath: `
+          <circle cx="50" cy="25" r="8" fill="#F43F5E" />
+          <line x1="50" y1="33" x2="50" y2="65" stroke="#F43F5E" />
+          <!-- Both Arms Horizontal -->
+          <line x1="15" y1="40" x2="85" y2="40" stroke="#38BDF8" stroke-width="6" />
+          <line x1="50" y1="65" x2="40" y2="92" stroke="#F43F5E" />
+          <line x1="50" y1="65" x2="60" y2="92" stroke="#F43F5E" />
+        `,
+        evaluator: (angles, landmarks) => {
+          // Wrists roughly level with shoulders
+          const leftLevel = Math.abs(landmarks[15].y - landmarks[11].y) < 0.14;
+          const rightLevel = Math.abs(landmarks[16].y - landmarks[12].y) < 0.14;
+          const leftStraight = angles.leftElbow > 130;
+          const rightStraight = angles.rightElbow > 130;
+
+          let score = 0;
+          if (leftLevel) score += 30;
+          if (rightLevel) score += 30;
+          if (leftStraight) score += 20;
+          if (rightStraight) score += 20;
+          return Math.min(100, score);
+        }
+      },
+      {
+        id: "hiphop_freeze",
+        name: "힙합 크로스 가드",
+        hint: "가슴 앞에서 양 팔을 교차(X자)하여 힙합 프리즈 자세를 취하세요!",
+        duration: 8,
+        svgPath: `
+          <circle cx="50" cy="25" r="8" fill="#F43F5E" />
+          <line x1="50" y1="33" x2="50" y2="65" stroke="#F43F5E" />
+          <!-- Arms crossed in chest -->
+          <line x1="30" y1="36" x2="70" y2="52" stroke="#38BDF8" stroke-width="6" />
+          <line x1="70" y1="36" x2="30" y2="52" stroke="#38BDF8" stroke-width="6" />
+          <line x1="50" y1="65" x2="35" y2="90" stroke="#F43F5E" />
+          <line x1="50" y1="65" x2="65" y2="90" stroke="#F43F5E" />
+        `,
+        evaluator: (angles, landmarks) => {
+          // Wrists positioned near opposite shoulder or middle chest
+          const leftWristCrossed = landmarks[15].x > landmarks[12].x - 0.1;
+          const rightWristCrossed = landmarks[16].x < landmarks[11].x + 0.1;
+          const wristsAroundChest = landmarks[15].y > landmarks[11].y && landmarks[15].y < landmarks[23].y;
+
+          let score = 0;
+          if (leftWristCrossed) score += 35;
+          if (rightWristCrossed) score += 35;
+          if (wristsAroundChest) score += 30;
+          return Math.min(100, score);
+        }
+      }
+    ];
+
+    /* ==========================================================================
+       2. TONE.JS SOUND EFFECTS SYNTHESIZER
+       ========================================================================== */
+    class DanceSoundFX {
+      constructor() {
+        this.isMuted = false;
+        this.synth = null;
+        this.bassSynth = null;
+        this.snareSynth = null;
+        this.bgLoop = null;
+        this.isInitialized = false;
+      }
+
+      async init() {
+        if (this.isInitialized) return;
+        try {
+          await Tone.start();
+          // Poly synth for melody & fanfares
+          this.synth = new Tone.PolySynth(Tone.Synth, {
+            oscillator: { type: "triangle" },
+            envelope: { attack: 0.02, decay: 0.1, sustain: 0.2, release: 0.4 }
+          }).toDestination();
+          this.synth.volume.value = -6;
+
+          // Bass Drum Synth
+          this.bassSynth = new Tone.MembraneSynth().toDestination();
+          this.bassSynth.volume.value = -8;
+
+          // Metal Synth for combo hits
+          this.metalSynth = new Tone.MetalSynth({
+            frequency: 300,
+            envelope: { attack: 0.001, decay: 0.14, release: 0.1 },
+            harmonicity: 3.1,
+            modulationIndex: 16,
+            resonance: 4000,
+            octaves: 1.5
+          }).toDestination();
+          this.metalSynth.volume.value = -12;
+
+          // Simple Background Dance Beat Loop
+          let beatIndex = 0;
+          this.bgLoop = new Tone.Loop(time => {
+            if (this.isMuted) return;
+            if (beatIndex % 2 === 0) {
+              this.bassSynth.triggerAttackRelease("C2", "8n", time);
+            } else {
+              this.metalSynth.triggerAttackRelease("16n", time, 0.4);
+            }
+            beatIndex++;
+          }, "4n");
+          Tone.Transport.bpm.value = 120;
+          this.isInitialized = true;
+        } catch (e) {
+          console.warn("Audio Context init pending user interaction:", e);
+        }
+      }
+
+      startBGM() {
+        if (!this.isInitialized || this.isMuted) return;
+        Tone.Transport.start();
+        this.bgLoop.start(0);
+      }
+
+      stopBGM() {
+        if (!this.isInitialized) return;
+        Tone.Transport.stop();
+        if (this.bgLoop) this.bgLoop.stop();
+      }
+
+      playPerfect() {
+        if (!this.isInitialized || this.isMuted) return;
+        this.synth.triggerAttackRelease(["E5", "G#5", "B5", "E6"], "16n");
+      }
+
+      playGood() {
+        if (!this.isInitialized || this.isMuted) return;
+        this.synth.triggerAttackRelease(["C5", "G5"], "16n");
+      }
+
+      playRoundStart() {
+        if (!this.isInitialized || this.isMuted) return;
+        this.synth.triggerAttackRelease(["C4", "G4", "C5"], "8n");
+      }
+
+      playGameEnd() {
+        if (!this.isInitialized || this.isMuted) return;
+        this.synth.triggerAttackRelease(["C5", "E5", "G5", "C6"], "4n");
+      }
+
+      toggleMute() {
+        this.isMuted = !this.isMuted;
+        if (this.isMuted) {
+          this.stopBGM();
+        } else {
+          this.startBGM();
+        }
+        return this.isMuted;
+      }
+    }
+
+    const sound = new DanceSoundFX();
+
+    /* ==========================================================================
+       3. GAME STATE MANAGEMENT
+       ========================================================================== */
+    const gameState = {
+      playerName: "댄싱스타",
+      isPlaying: false,
+      currentMissionIndex: 0,
+      score: 0,
+      combo: 0,
+      maxCombo: 0,
+      accuracyHistory: [],
+      currentAccuracy: 0,
+      missionTimeLeft: 0,
+      timerInterval: null,
+      lastHitTime: 0
+    };
+
+    // Simulated Peer / Global Leaderboard Store
+    const DEFAULT_LEADERBOARD = [
+      { name: "뉴진스짱", score: 8420, date: "방금 전" },
+      { name: "홍대비보이", score: 7950, date: "10분 전" },
+      { name: "리듬파이터", score: 7200, date: "1시간 전" },
+      { name: "춤추는판다", score: 6850, date: "3시간 전" },
+      { name: "K-Dance1호", score: 5900, date: "어제" }
+    ];
+
+    function getLeaderboard() {
+      const stored = localStorage.getItem("kdance_leaderboard");
+      if (stored) {
+        try { return JSON.parse(stored); } catch (e) { /* fallback */ }
+      }
+      return DEFAULT_LEADERBOARD;
+    }
+
+    function saveLeaderboard(list) {
+      localStorage.setItem("kdance_leaderboard", JSON.stringify(list));
+    }
+
+    /* ==========================================================================
+       4. POSE VECTOR & ANGLE CALCULATIONS
+       ========================================================================== */
+    function calculateAngle(A, B, C) {
+      if (!A || !B || !C) return 180;
+      const radians = Math.atan2(C.y - B.y, C.x - B.x) - Math.atan2(A.y - B.y, A.x - B.x);
+      let angle = Math.abs((radians * 180.0) / Math.PI);
+      if (angle > 180.0) {
+        angle = 360.0 - angle;
+      }
+      return angle;
+    }
+
+    function extractAngles(landmarks) {
+      return {
+        // Left Elbow: Shoulder(11) -> Elbow(13) -> Wrist(15)
+        leftElbow: calculateAngle(landmarks[11], landmarks[13], landmarks[15]),
+        // Right Elbow: Shoulder(12) -> Elbow(14) -> Wrist(16)
+        rightElbow: calculateAngle(landmarks[12], landmarks[14], landmarks[16]),
+        // Left Shoulder: Elbow(13) -> Shoulder(11) -> Hip(23)
+        leftShoulder: calculateAngle(landmarks[13], landmarks[11], landmarks[23]),
+        // Right Shoulder: Elbow(14) -> Shoulder(12) -> Hip(24)
+        rightShoulder: calculateAngle(landmarks[14], landmarks[12], landmarks[24]),
+        // Left Knee: Hip(23) -> Knee(25) -> Ankle(27)
+        leftKnee: calculateAngle(landmarks[23], landmarks[25], landmarks[27]),
+        // Right Knee: Hip(24) -> Knee(26) -> Ankle(28)
+        rightKnee: calculateAngle(landmarks[24], landmarks[26], landmarks[28])
+      };
+    }
+
+    /* ==========================================================================
+       5. DOM ELEMENTS REFERENCE
+       ========================================================================== */
+    const videoElement = document.getElementById("webcam");
+    const canvasElement = document.getElementById("outputCanvas");
+    const canvasCtx = canvasElement.getContext("2d");
+
+    const hudRound = document.getElementById("hudRound");
+    const hudAccuracy = document.getElementById("hudAccuracy");
+    const hudScore = document.getElementById("hudScore");
+    const hudCombo = document.getElementById("hudCombo");
+    const comboBadge = document.getElementById("comboBadge");
+    const accuracyProgressBar = document.getElementById("accuracyProgressBar");
+    const targetSilhouette = document.getElementById("targetSilhouette");
+    const targetPoseName = document.getElementById("targetPoseName");
+    const targetPoseHint = document.getElementById("targetPoseHint");
+    const timeRemaining = document.getElementById("timeRemaining");
+    const matchPill = document.getElementById("matchPill");
+    const splashEffect = document.getElementById("splashEffect");
+    const splashText = document.getElementById("splashText");
+    const startOverlay = document.getElementById("startOverlay");
+    const resultModal = document.getElementById("resultModal");
+    const inputPlayerName = document.getElementById("inputPlayerName");
+    const playerBadge = document.getElementById("playerBadge");
+    const missionIndicatorList = document.getElementById("missionIndicatorList");
+    const toastMessage = document.getElementById("toastMessage");
+    const toastText = document.getElementById("toastText");
+    const leaderboardModal = document.getElementById("leaderboardModal");
+    const leaderboardList = document.getElementById("leaderboardList");
+
+    /* ==========================================================================
+       6. UI HELPER FUNCTIONS
+       ========================================================================== */
+    function showToast(msg) {
+      toastText.innerText = msg;
+      toastMessage.classList.remove("translate-y-20", "opacity-0");
+      setTimeout(() => {
+        toastMessage.classList.add("translate-y-20", "opacity-0");
+      }, 2500);
+    }
+
+    function showSplash(text, colorClass) {
+      splashText.innerText = text;
+      splashText.className = `font-display text-5xl sm:text-7xl font-extrabold tracking-widest ${colorClass}`;
+      splashEffect.style.opacity = "1";
+      splashEffect.style.transform = "scale(1.1)";
+      setTimeout(() => {
+        splashEffect.style.opacity = "0";
+        splashEffect.style.transform = "scale(0.85)";
+      }, 400);
+    }
+
+    function renderIndicators() {
+      missionIndicatorList.innerHTML = "";
+      DANCE_MISSIONS.forEach((m, idx) => {
+        const dot = document.createElement("div");
+        dot.className = `w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold transition-all ${
+          idx === gameState.currentMissionIndex
+            ? "bg-pink-600 text-white ring-2 ring-pink-400 scale-105"
+            : idx < gameState.currentMissionIndex
+            ? "bg-emerald-600 text-white"
+            : "bg-slate-800 text-slate-500"
+        }`;
+        dot.innerText = idx + 1;
+        missionIndicatorList.appendChild(dot);
+      });
+    }
+
+    function updateTargetPoseCard() {
+      const mission = DANCE_MISSIONS[gameState.currentMissionIndex];
+      if (!mission) return;
+
+      targetPoseName.innerText = mission.name;
+      targetPoseHint.innerText = mission.hint;
+      targetSilhouette.innerHTML = mission.svgPath;
+      hudRound.innerText = `${gameState.currentMissionIndex + 1} / ${DANCE_MISSIONS.length}`;
+      renderIndicators();
+      sound.playRoundStart();
+    }
+
+    /* ==========================================================================
+       7. MEDIAPIPE POSE TRACKER PIPELINE
+       ========================================================================== */
+    let poseTracker = null;
+    let cameraInstance = null;
+
+    function initMediaPipe() {
+      poseTracker = new Pose({
+        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
+      });
+
+      poseTracker.setOptions({
+        modelComplexity: 1,
+        smoothLandmarks: true,
+        enableSegmentation: false,
+        smoothSegmentation: false,
+        minDetectionConfidence: 0.55,
+        minTrackingConfidence: 0.55
+      });
+
+      poseTracker.onResults(onPoseResults);
+    }
+
+    // Draw skeletal bones on canvas
+    const POSE_CONNECTIONS = [
+      [11, 12], // shoulders
+      [11, 13], [13, 15], // left arm
+      [12, 14], [14, 16], // right arm
+      [11, 23], [12, 24], // torso sides
+      [23, 24], // hips
+      [23, 25], [25, 27], // left leg
+      [24, 26], [26, 28]  // right leg
+    ];
+
+    function onPoseResults(results) {
+      // Ensure canvas matches video aspect ratio dynamically
+      if (canvasElement.width !== videoElement.videoWidth) {
+        canvasElement.width = videoElement.videoWidth || 640;
+        canvasElement.height = videoElement.videoHeight || 480;
+      }
+
+      canvasCtx.save();
+      canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+
+      // Draw camera frame directly to mirrored canvas
+      canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+
+      // Dark translucent tint over camera for neon cyber aesthetic
+      canvasCtx.fillStyle = "rgba(10, 15, 29, 0.35)";
+      canvasCtx.fillRect(0, 0, canvasElement.width, canvasElement.height);
+
+      if (results.poseLandmarks) {
+        const landmarks = results.poseLandmarks;
+        const angles = extractAngles(landmarks);
+
+        // 1. Draw Skeleton Lines
+        canvasCtx.lineWidth = 4;
+        POSE_CONNECTIONS.forEach(([i, j]) => {
+          const p1 = landmarks[i];
+          const p2 = landmarks[j];
+          if (p1 && p2 && p1.visibility > 0.4 && p2.visibility > 0.4) {
+            canvasCtx.beginPath();
+            canvasCtx.moveTo(p1.x * canvasElement.width, p1.y * canvasElement.height);
+            canvasCtx.lineTo(p2.x * canvasElement.width, p2.y * canvasElement.height);
+            // Dynamic color based on match quality
+            canvasCtx.strokeStyle = gameState.currentAccuracy > 75 
+              ? "rgba(244, 63, 94, 0.9)" 
+              : "rgba(56, 189, 248, 0.8)";
+            canvasCtx.shadowColor = gameState.currentAccuracy > 75 ? "#f43f5e" : "#38bdf8";
+            canvasCtx.shadowBlur = 10;
+            canvasCtx.stroke();
+          }
+        });
+
+        // 2. Draw Keypoints
+        landmarks.forEach((p, idx) => {
+          if (p.visibility > 0.4 && [0, 11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28].includes(idx)) {
+            const x = p.x * canvasElement.width;
+            const y = p.y * canvasElement.height;
+            canvasCtx.beginPath();
+            canvasCtx.arc(x, y, 6, 0, 2 * Math.PI);
+            canvasCtx.fillStyle = idx === 15 || idx === 16 ? "#FBBF24" : "#FFFFFF"; // Hands highlighted yellow
+            canvasCtx.shadowColor = "#FBBF24";
+            canvasCtx.shadowBlur = 8;
+            canvasCtx.fill();
+          }
+        });
+
+        // 3. Evaluate Match Score if Game is Running
+        if (gameState.isPlaying) {
+          evaluateCurrentPose(angles, landmarks);
+        }
+      } else {
+        // No body detected
+        if (gameState.isPlaying) {
+          matchPill.innerText = "인식 중...";
+          matchPill.className = "absolute bottom-2 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-slate-800 text-slate-400";
+        }
+      }
+
+      canvasCtx.restore();
+    }
+
+    /* ==========================================================================
+       8. REAL-TIME POSE MATCHING & SCORING LOGIC
+       ========================================================================== */
+    function evaluateCurrentPose(angles, landmarks) {
+      const mission = DANCE_MISSIONS[gameState.currentMissionIndex];
+      if (!mission) return;
+
+      const accuracy = Math.round(mission.evaluator(angles, landmarks));
+      gameState.currentAccuracy = accuracy;
+
+      // Update HUD & Progress Bar
+      hudAccuracy.innerText = `${accuracy}%`;
+      accuracyProgressBar.style.width = `${accuracy}%`;
+
+      // Visual feedback pill
+      if (accuracy >= 80) {
+        matchPill.innerText = "PERFECT ✨";
+        matchPill.className = "absolute bottom-2 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-pink-500 text-white animate-pulse";
+      } else if (accuracy >= 55) {
+        matchPill.innerText = "GOOD 👍";
+        matchPill.className = "absolute bottom-2 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-cyan-500 text-slate-900";
+      } else {
+        matchPill.innerText = "포즈 일치 대기";
+        matchPill.className = "absolute bottom-2 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-slate-800 text-slate-400";
+      }
+
+      // Continuous points scoring with throttle
+      const now = performance.now();
+      if (now - gameState.lastHitTime > 300) { // Every 300ms
+        if (accuracy >= 75) {
+          // Increase combo & score
+          gameState.combo++;
+          if (gameState.combo > gameState.maxCombo) gameState.maxCombo = gameState.combo;
+          const comboBonus = Math.floor(gameState.combo * 2.5);
+          const gainedScore = Math.floor((accuracy * 1.5) + comboBonus);
+          gameState.score += gainedScore;
+
+          hudScore.innerText = gameState.score.toLocaleString();
+          hudCombo.innerText = gameState.combo;
+          comboBadge.classList.remove("hidden");
+
+          if (accuracy >= 88 && gameState.combo % 4 === 0) {
+            showSplash(`PERFECT! +${gainedScore}`, "text-pink-400 neon-text-pink");
+            sound.playPerfect();
+          } else if (gameState.combo % 3 === 0) {
+            sound.playGood();
+          }
+
+          gameState.accuracyHistory.push(accuracy);
+          gameState.lastHitTime = now;
+        } else if (accuracy < 40 && gameState.combo > 0) {
+          // Break combo gradually
+          if (now - gameState.lastHitTime > 1200) {
+            gameState.combo = 0;
+            comboBadge.classList.add("hidden");
+          }
+        }
+      }
+    }
+
+    /* ==========================================================================
+       9. GAME LIFECYCLE CONTROLLERS
+       ========================================================================== */
+    function startGame() {
+      const name = inputPlayerName.value.trim() || "댄싱스타";
+      gameState.playerName = name;
+      playerBadge.innerText = name;
+      localStorage.setItem("kdance_player_name", name);
+
+      gameState.isPlaying = true;
+      gameState.score = 0;
+      gameState.combo = 0;
+      gameState.maxCombo = 0;
+      gameState.currentMissionIndex = 0;
+      gameState.accuracyHistory = [];
+
+      hudScore.innerText = "0";
+      hudCombo.innerText = "0";
+      comboBadge.classList.add("hidden");
+      startOverlay.classList.add("hidden");
+      resultModal.classList.add("hidden");
+
+      sound.init().then(() => {
+        sound.startBGM();
+      });
+
+      startMission(0);
+    }
+
+    function startMission(index) {
+      if (index >= DANCE_MISSIONS.length) {
+        endGame();
+        return;
+      }
+
+      gameState.currentMissionIndex = index;
+      const mission = DANCE_MISSIONS[index];
+      gameState.missionTimeLeft = mission.duration;
+
+      updateTargetPoseCard();
+      timeRemaining.innerText = `${String(gameState.missionTimeLeft).padStart(2, '0')}s`;
+
+      if (gameState.timerInterval) clearInterval(gameState.timerInterval);
+
+      gameState.timerInterval = setInterval(() => {
+        gameState.missionTimeLeft--;
+        timeRemaining.innerText = `${String(gameState.missionTimeLeft).padStart(2, '0')}s`;
+
+        if (gameState.missionTimeLeft <= 0) {
+          clearInterval(gameState.timerInterval);
+          showToast(`라운드 ${index + 1} 완료!`);
+          startMission(index + 1);
+        }
+      }, 1000);
+    }
+
+    function endGame() {
+      gameState.isPlaying = false;
+      if (gameState.timerInterval) clearInterval(gameState.timerInterval);
+      sound.stopBGM();
+      sound.playGameEnd();
+
+      // Calculate Averages
+      const avgAcc = gameState.accuracyHistory.length > 0 
+        ? Math.round(gameState.accuracyHistory.reduce((a, b) => a + b, 0) / gameState.accuracyHistory.length) 
+        : 0;
+
+      let grade = "C RANK";
+      if (gameState.score > 6000) grade = "S+ GOD DANCER";
+      else if (gameState.score > 4500) grade = "S RANK";
+      else if (gameState.score > 3000) grade = "A RANK";
+      else if (gameState.score > 1500) grade = "B RANK";
+
+      document.getElementById("resultFinalScore").innerText = gameState.score.toLocaleString();
+      document.getElementById("resultMaxCombo").innerText = `${gameState.maxCombo} Combo`;
+      document.getElementById("resultAvgAccuracy").innerText = `${avgAcc}%`;
+      document.getElementById("resultRankGrade").innerText = grade;
+
+      resultModal.classList.remove("hidden");
+    }
+
+    function registerScoreToLeaderboard() {
+      const list = getLeaderboard();
+      list.push({
+        name: gameState.playerName,
+        score: gameState.score,
+        date: "방금 전"
+      });
+      list.sort((a, b) => b.score - a.score);
+      saveLeaderboard(list.slice(0, 15)); // Keep top 15
+      showToast("명예의 전당에 점수가 등록되었습니다!");
+      openLeaderboard();
+    }
+
+    function openLeaderboard() {
+      const list = getLeaderboard();
+      leaderboardList.innerHTML = "";
+      list.forEach((item, index) => {
+        const row = document.createElement("div");
+        const rankColors = ["text-amber-400 font-black", "text-slate-300 font-black", "text-amber-600 font-black"];
+        const rankClass = rankColors[index] || "text-slate-400 font-bold";
+        
+        row.className = `flex items-center justify-between p-3 rounded-xl bg-slate-800/60 border ${
+          item.name === gameState.playerName ? "border-pink-500/70 bg-pink-950/20" : "border-slate-800"
+        }`;
+        row.innerHTML = `
+          <div class="flex items-center gap-3">
+            <span class="w-6 text-center text-sm ${rankClass}">#${index + 1}</span>
+            <div>
+              <p class="text-xs font-bold text-white">${item.name} ${item.name === gameState.playerName ? '<span class="text-[9px] px-1.5 py-0.2 rounded bg-pink-500 text-white ml-1">YOU</span>' : ''}</p>
+              <span class="text-[10px] text-slate-500">${item.date || "기록"}</span>
+            </div>
+          </div>
+          <span class="font-display text-sm font-bold text-pink-400">${item.score.toLocaleString()} P</span>
+        `;
+        leaderboardList.appendChild(row);
+      });
+      leaderboardModal.classList.remove("hidden");
+    }
+
+    /* ==========================================================================
+       10. EVENT HANDLERS & INITIALIZATION
+       ========================================================================== */
+    document.getElementById("btnStartGame").addEventListener("click", async () => {
+      try {
+        await sound.init();
+        initMediaPipe();
+
+        // Initialize WebCam through MediaPipe Camera utility
+        cameraInstance = new Camera(videoElement, {
+          onFrame: async () => {
+            await poseTracker.send({ image: videoElement });
+          },
+          width: 1280,
+          height: 720
+        });
+
+        await cameraInstance.start();
+        showToast("카메라가 활성화되었습니다!");
+        startGame();
+      } catch (err) {
+        console.error("Camera access failed:", err);
+        showToast("카메라 권한을 허용해주세요!");
+      }
+    });
+
+    document.getElementById("btnRestartGame").addEventListener("click", () => {
+      startGame();
+    });
+
+    document.getElementById("btnShareLeaderboard").addEventListener("click", () => {
+      registerScoreToLeaderboard();
+    });
+
+    document.getElementById("btnToggleAudio").addEventListener("click", () => {
+      const isMuted = sound.toggleMute();
+      const icon = document.getElementById("audioIcon");
+      if (isMuted) {
+        icon.className = "ph ph-speaker-slash text-lg text-rose-400";
+        showToast("오디오 음소거");
+      } else {
+        icon.className = "ph ph-speaker-high text-lg text-white";
+        showToast("오디오 켜짐");
+      }
+    });
+
+    document.getElementById("btnLeaderboardModal").addEventListener("click", openLeaderboard);
+    document.getElementById("btnCloseLeaderboard").addEventListener("click", () => leaderboardModal.classList.add("hidden"));
+    document.getElementById("btnCloseLeaderboardBottom").addEventListener("click", () => leaderboardModal.classList.add("hidden"));
+
+    document.getElementById("btnResetLocalScores").addEventListener("click", () => {
+      localStorage.removeItem("kdance_leaderboard");
+      openLeaderboard();
+      showToast("점수 목록이 초기화되었습니다.");
+    });
+
+    // Auto-restore saved player name
+    const savedName = localStorage.getItem("kdance_player_name");
+    if (savedName) {
+      inputPlayerName.value = savedName;
+      playerBadge.innerText = savedName;
+      gameState.playerName = savedName;
+    }
+
+    // Initial SVG silhouette setup
+    targetSilhouette.innerHTML = DANCE_MISSIONS[0].svgPath;
+    targetPoseName.innerText = DANCE_MISSIONS[0].name;
+    targetPoseHint.innerText = DANCE_MISSIONS[0].hint;
+    renderIndicators();
+  </script>
+</body>
+</html>
