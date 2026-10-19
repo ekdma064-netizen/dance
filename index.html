@@ -95,6 +95,7 @@ button{font-family:inherit;cursor:pointer;border:0}
 .toast.show{opacity:1;transform:translate(-50%,-50%) scale(1)}
 .toast .g{font-size:clamp(48px,9vw,96px);text-shadow:0 6px 0 rgba(0,0,0,.45)}
 .toast .p{font-size:clamp(24px,4vw,40px);color:#fff;text-shadow:0 4px 0 rgba(0,0,0,.45)}
+.overlay .retry{pointer-events:auto;margin:12px auto 4px;display:block;padding:12px 22px;border-radius:14px;background:var(--accent);color:#2a2000;font-family:"Jua";font-size:20px}
 .spinner{width:56px;height:56px;border:6px solid rgba(255,255,255,.2);border-top-color:var(--accent);border-radius:50%;animation:sp 1s linear infinite;margin-bottom:14px}
 @keyframes sp{to{transform:rotate(360deg)}}
 
@@ -382,7 +383,13 @@ function setOverlay(html){ $('overlay').innerHTML=html; }
 async function startCamera(){
   if(stream) return;
   if(!navigator.mediaDevices?.getUserMedia) throw new Error('이 브라우저는 카메라를 지원하지 않아요. 크롬/사파리 최신 버전에서 HTTPS 주소로 열어 주세요.');
-  stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user',width:{ideal:640},height:{ideal:480}}});
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user',width:{ideal:640},height:{ideal:480}}});
+  }catch(e){
+    if(e?.name==='NotAllowedError'||e?.name==='SecurityError') throw e;
+    // 노트북 카메라 일부는 해상도 지정 시 실패 → 기본 설정으로 한 번 더 시도
+    stream=await navigator.mediaDevices.getUserMedia({audio:false,video:true});
+  }
   video.srcObject=stream; await video.play();
 }
 async function loadModel(){
@@ -417,16 +424,26 @@ $('btnStart').addEventListener('click',async()=>{
   try{ await navigator.wakeLock?.request('screen'); }catch(e){}
   S.name=name; show('gameScreen'); resetGame(); S.phase='loading';
   showPreview(S.queue[0],'첫 번째 미션 미리보기');
+  bootCamera();
+});
+async function bootCamera(){
+  stopMusic(); cancelIntro(); S.introBusy=false; S.phase='loading';
   setOverlay('<div class="spinner"></div><div class="msg">불러오는 중…<small>처음 한 번은 10초 정도 걸릴 수 있어요</small></div>');
   try{ await startCamera(); await loadModel(); }
   catch(err){ console.error(err); S.phase='error';
-    const m = err?.name==='NotAllowedError' ? '카메라 권한이 거부되었어요. 주소창의 카메라 아이콘에서 허용해 주세요.' :
-      err?.name==='NotFoundError' ? '카메라를 찾지 못했어요.' : (err?.message||'알 수 없는 오류');
-    setOverlay(`<div class="msg">시작할 수 없어요 😢<small>${escapeHtml(m)}<br>GitHub Pages 같은 https:// 주소에서 열어야 카메라가 켜져요.<br>패스 버튼을 누르면 다음 동작을 볼 수 있어요.</small></div>`);
+    const n=err?.name;
+    const m = n==='NotAllowedError' ? '카메라 사용이 막혀 있어요.<br>주소창 왼쪽 자물쇠(또는 카메라) 아이콘 → 카메라 "허용"으로 바꿔 주세요.' :
+      n==='NotFoundError' ? '카메라를 찾지 못했어요. 카메라가 연결되어 있는지 확인해 주세요.' :
+      (n==='NotReadableError'||n==='TrackStartError'||/in use|Could not start/i.test(err?.message||'')) ?
+        '다른 프로그램이 카메라를 쓰고 있어요.<br>줌·팀즈·카메라 앱, 이 게임을 연 다른 탭을 모두 닫고<br>아래 버튼을 눌러 주세요.' :
+      escapeHtml(err?.message||'알 수 없는 오류');
+    const https = location.protocol==='https:' ? '' : '<br>GitHub Pages 같은 https:// 주소에서 열어야 카메라가 켜져요.';
+    setOverlay(`<div class="msg">카메라를 켤 수 없어요 😢<small>${m}${https}</small><button class="retry" id="btnRetry">카메라 다시 연결</button><small>카메라 없이 패스 버튼으로 동작만 미리 볼 수도 있어요.</small></div>`);
     startPreviewCycle(); return; }
   if(!loopStarted){ loopStarted=true; requestAnimationFrame(loop); }
-  beginCheck();
-});
+  setOverlay(''); resetGame(); beginCheck();
+}
+$('overlay').addEventListener('click',e=>{ if(e.target.id==='btnRetry') bootCamera(); });
 function resetGame(){
   settings.rounds=POSES.length;  // 모든 미션을 한 번씩, 무작위 순서
   S.lv=LEVELS[settings.level];
