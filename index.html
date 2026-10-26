@@ -154,16 +154,14 @@ button{font-family:inherit;cursor:pointer;border:0}
         <label class="tog"><input id="optMirror" type="checkbox" checked> 좌우 반대로 해도 인정</label></div>
     </div>
     <button class="go" id="btnStart">게임 시작!</button>
-    <p class="best" id="bestLine"></p>
   </div>
 </section>
 
 <!-- ================= 게임 화면 ================= -->
 <section id="gameScreen" class="screen">
   <div class="hud">
-    <div class="pill">미션 <b id="hRound">0</b> / <span id="hTotal">0</span></div>
-    <div class="pill">점수 <b id="hScore">0</b></div>
-    <div class="pill">콤보 <b id="hCombo">0</b></div>
+    <div class="pill">미션 <b id="hRound">0</b></div>
+    <div class="pill">성공 <b id="hClear">0</b></div>
     <div class="sp"></div>
     <button id="btnPause">일시정지</button>
     <button id="btnQuit">그만하기</button>
@@ -199,12 +197,10 @@ button{font-family:inherit;cursor:pointer;border:0}
 <section id="resultScreen" class="screen">
   <div class="res">
     <div class="who" id="rWho"></div>
-    <div class="total" id="rTotal">0</div>
-    <div id="rBest"></div>
     <div class="stats">
-      <div><b id="rClear">0/0</b><span>성공한 미션</span></div>
-      <div><b id="rCombo">0</b><span>최대 콤보</span></div>
-      <div><b id="rAcc">0%</b><span>평균 정확도</span></div>
+      <div><b id="rTried">0</b><span>도전한 미션</span></div>
+      <div><b id="rClear">0</b><span>성공</span></div>
+      <div><b id="rPass">0</b><span>패스</span></div>
     </div>
     <div class="list" id="rList"></div>
     <div class="btns"><button class="a" id="btnAgain">다시 하기</button><button class="b" id="btnHome">처음으로</button></div>
@@ -304,7 +300,7 @@ const video=$('video'), cam=$('camCanvas'), cctx=cam.getContext('2d');
 const fig=$('figCanvas'), fctx=fig.getContext('2d');
 const settings={body:'full',level:'normal',rounds:0}; // 난이도 보통 고정, 미션 수 = 등록된 곡 수
 let landmarker=null, stream=null, loopStarted=false, lastVideoTime=-1, lastTs=0;
-const S={phase:'idle',queue:[],round:0,score:0,combo:0,maxCombo:0,results:[],
+const S={phase:'idle',queue:[],round:0,results:[],
   missionStart:0,hold:0,accSum:0,accT:0,best:0,smooth:0,phaseUntil:0,lastT:0,
   user:null,match:null,checkOk:0,cdStart:0,cdLast:-1,paused:false,cur:null,opt:null,lv:null};
 
@@ -364,7 +360,7 @@ document.querySelectorAll('.seg').forEach(seg=>{
 });
 function loadBest(){ try{ return JSON.parse(localStorage.getItem('poseChallengeBest')||'null'); }catch(e){ return null; } }
 function saveBest(v){ try{ localStorage.setItem('poseChallengeBest',JSON.stringify(v)); }catch(e){} }
-function showBest(){ const b=loadBest(); $('bestLine').innerHTML = b? `이 기기 최고 기록: <b>${b.score}</b>점 (${escapeHtml(b.name)})` : ''; }
+function showBest(){}
 function escapeHtml(s){ return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 try{ $('nick').value=localStorage.getItem('poseChallengeNick')||''; }catch(e){}
 
@@ -465,16 +461,17 @@ async function bootCamera(){
 }
 $('overlay').addEventListener('click',e=>{ if(e.target.id==='btnRetry') bootCamera(); });
 function resetGame(){
-  settings.rounds=POSES.length;  // 모든 미션을 한 번씩, 무작위 순서
   S.lv=LEVELS[settings.level];
   S.opt={useLegs:settings.body==='full',allowMirror:$('optMirror').checked,tol:S.lv.tol,grace:S.lv.grace};
   S.ghost=$('optGhost').checked;
-  S.queue=buildQueue(settings.rounds); S.round=0; S.score=0; S.combo=0; S.maxCombo=0; S.results=[]; S.paused=false;
+  S.queue=buildQueue(POSES.length); S.round=0; S.results=[]; S.paused=false;
   $('btnPause').textContent='일시정지';
-  $('hTotal').textContent=settings.rounds; updateHud();
+  updateHud();
   $('thr').style.left=S.lv.pass+'%';
 }
-function updateHud(){ $('hRound').textContent=Math.min(S.round,settings.rounds); $('hScore').textContent=S.score; $('hCombo').textContent=S.combo; }
+function updateHud(){ $('hRound').textContent=S.round; $('hClear').textContent=S.results.filter(r=>r.ok).length; }
+// 끝없이 반복: 한 바퀴(모든 곡 한 번씩)가 끝나면 새로 섞어서 이어 붙임 (같은 곡 연속 방지)
+function extendQueue(){ while(S.queue.length<S.round){ const bag=shuffle([...POSES]); if(bag[0]===S.queue[S.queue.length-1]) bag.push(bag.shift()); S.queue.push(...bag); } }
 function beginCheck(){ S.phase='check'; S.checkOk=0; S.cur=null; redrawMissionFigure();
   $('mTag').textContent='READY'; $('mName').textContent='자리 잡기'; $('mArtist').textContent='몸 전체가 보이면 미션이 시작돼요'; $('mMir').textContent=''; }
 // 미션 시작 전·카메라 오류 때도 미션 그림을 보여줌
@@ -483,7 +480,7 @@ function showPreview(pose,tag){ S.cur=pose; redrawMissionFigure();
   $('mDesc').textContent=pose.desc; $('mMir').textContent=''; }
 // 카메라가 없을 때: 동작을 하나씩 보여주고, 패스 버튼으로 다음 동작
 let previewIdx=0;
-function previewStep(){ const n=S.queue.length; const p=S.queue[previewIdx%n]; const tag=`동작 미리보기 ${previewIdx%n+1} / ${n}`;
+function previewStep(){ const n=S.queue.length; const p=S.queue[previewIdx%n]; const tag='동작 미리보기';
   stopMusic(); S.introBusy=true; showPreview(p,tag);
   showIntro(p,tag,()=>{ S.introBusy=false; playMusic(p.id); }); }
 function startPreviewCycle(){ previewIdx=0; previewStep(); }
@@ -509,13 +506,13 @@ function showIntro(pose,tag,done){
 }
 function startMission(){
   S.round++;
-  if(S.round>settings.rounds){ finish(); return; }
+  extendQueue();
   S.cur=S.queue[S.round-1]; S.phase='intro'; S.match=null;
   $('mTag').textContent=`MISSION ${S.round}`; $('mName').textContent=S.cur.name; $('mArtist').textContent=S.cur.artist; $('mDesc').textContent=S.cur.desc;
   $('mMir').textContent= S.opt.allowMirror ? '↔ 좌우 반대로 해도 OK' : '↔ 화면과 같은 쪽 팔다리로 따라 하기';
   $('mPct').textContent='0%'; $('barMatch').style.width='0'; $('barHold').style.width='0'; $('mTime').textContent='걸린 시간 -';
   setOverlay(''); redrawMissionFigure(); updateHud();
-  showIntro(S.cur,`MISSION ${S.round} / ${settings.rounds}`,()=>{
+  showIntro(S.cur,`MISSION ${S.round}`,()=>{
     S.phase='mission'; S.missionStart=performance.now();
     S.hold=0; S.accSum=0; S.accT=0; S.best=0; S.smooth=0; S.match=null;
     sfx.go(); playMusic(S.cur.id);   // 분할화면으로 넘어가면 음악 시작
@@ -523,19 +520,13 @@ function startMission(){
 }
 function success(elapsed){
   stopMusic();
-  const acc=S.accT? S.accSum/S.accT : S.smooth;
-  S.combo++; S.maxCombo=Math.max(S.maxCombo,S.combo);
-  const mult=1+0.1*Math.min(S.combo-1,5);
-  const pts=Math.round((100+acc+Math.max(0,10-elapsed)*10)*mult);
-  S.score+=pts;
-  const grade= acc>=92?['PERFECT!','#FFD93D']: acc>=84?['GREAT!','#5BE37D']:['GOOD!','#4ECDC4'];
-  S.results.push({name:`${S.cur.name} - ${S.cur.artist}`,ok:true,acc:Math.round(acc),pts,grade:grade[0]});
-  toast(grade[0],grade[1],`+${pts}${S.combo>1?`  (${S.combo}콤보)`:''}`); sfx.ok();
+  S.results.push({name:`${S.cur.name} - ${S.cur.artist}`,ok:true});
+  toast('성공!','#FFD93D','다음 동작으로 넘어가요'); sfx.ok();
   S.phase='feedback'; S.phaseUntil=performance.now()+1400; updateHud();
 }
 function pass(){
   stopMusic();
-  S.combo=0; S.results.push({name:`${S.cur.name} - ${S.cur.artist}`,ok:false,acc:Math.round(S.best),pts:0,grade:'PASS'});
+  S.results.push({name:`${S.cur.name} - ${S.cur.artist}`,ok:false});
   toast('패스!','#B9B4E0','다음 동작으로 넘어가요'); sfx.fail();
   S.phase='feedback'; S.phaseUntil=performance.now()+900; updateHud();
 }
@@ -551,14 +542,10 @@ function finish(){
   stopMusic(); cancelIntro();
   S.phase='result'; S.cur=null;
   const clear=S.results.filter(r=>r.ok).length, n=S.results.length;
-  const avg=n? Math.round(S.results.reduce((a,r)=>a+r.acc,0)/n) : 0;
   $('rWho').textContent=`${S.name} 님의 결과 · ${settings.body==='full'?'전신':'상반신'}`;
-  $('rTotal').textContent=S.score; $('rClear').textContent=`${clear}/${n}`; $('rCombo').textContent=S.maxCombo; $('rAcc').textContent=avg+'%';
-  const best=loadBest();
-  if(!best||S.score>best.score){ saveBest({score:S.score,name:S.name}); $('rBest').innerHTML= S.score>0?'<span class="newbest">🎉 이 기기 최고 기록!</span>':''; }
-  else $('rBest').innerHTML=`<span style="color:var(--muted);font-size:14px">이 기기 최고 기록 ${best.score}점</span>`;
+  $('rTried').textContent=n; $('rClear').textContent=clear; $('rPass').textContent=n-clear;
   $('rList').innerHTML=S.results.map((r,i)=>`<div class="it"><span>${i+1}. ${escapeHtml(r.name)}</span>
-    <span>${r.acc}% · <em style="color:${r.ok?'var(--good)':'var(--bad)'}">${r.grade}</em> ${r.ok?'+'+r.pts:''}</span></div>`).join('');
+    <em style="color:${r.ok?'var(--good)':'var(--bad)'}">${r.ok?'성공':'패스'}</em></div>`).join('');
   show('resultScreen');
 }
 $('btnAgain').addEventListener('click',()=>{ show('gameScreen'); resetGame(); beginCheck(); requestAnimationFrame(redrawMissionFigure); });
